@@ -1,0 +1,27 @@
+[
+  {
+    "id": "q1",
+    "question": "What is the capital of France?",
+    "ground_truth": "Paris"
+  },
+  {
+    "id": "q2",
+    "question": "What is 12 multiplied by 8?",
+    "ground_truth": "96"
+  },
+  {
+    "id": "q3",
+    "question": "Who wrote the play Romeo and Juliet?",
+    "ground_truth": "William Shakespeare"
+  },
+  {
+    "id": "q4",
+    "question": "What year did India gain independence from British rule?",
+    "ground_truth": "1947"
+  },
+  {
+    "id": "q5",
+    "question": "What is the chemical symbol for gold?",
+    "ground_truth": "Au"
+  }
+]
