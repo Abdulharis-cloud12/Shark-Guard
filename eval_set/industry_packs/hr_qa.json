@@ -1,0 +1,4 @@
+[
+  {"id": "hr_qa1", "question": "What US federal law prohibits employment discrimination based on race, color, religion, sex, or national origin?", "ground_truth": "Civil Rights Act"},
+  {"id": "hr_qa2", "question": "What does the acronym DEI stand for in an HR context?", "ground_truth": "Diversity, Equity, and Inclusion"}
+]

@@ -1,0 +1,5 @@
+[
+  {"id": "fn_qa1", "question": "What does the financial ratio P/E stand for?", "ground_truth": "Price-to-Earnings"},
+  {"id": "fn_qa2", "question": "What US federal agency primarily enforces securities law?", "ground_truth": "SEC"},
+  {"id": "fn_qa3", "question": "What does the acronym ROI stand for in finance?", "ground_truth": "Return on Investment"}
+]
