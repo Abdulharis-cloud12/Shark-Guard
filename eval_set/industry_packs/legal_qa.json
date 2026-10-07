@@ -1,0 +1,5 @@
+[
+  {"id": "lg_qa1", "question": "What does the acronym IRAC stand for in legal writing?", "ground_truth": "Issue, Rule, Application, Conclusion"},
+  {"id": "lg_qa2", "question": "Besides offer and acceptance, what is the third classic element required to form a valid contract?", "ground_truth": "consideration"},
+  {"id": "lg_qa3", "question": "What is the standard of proof required for a conviction in most US criminal trials?", "ground_truth": "beyond a reasonable doubt"}
+]

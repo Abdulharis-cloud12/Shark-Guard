@@ -1,0 +1,198 @@
+name: SharkGuard CI
+
+on:
+<<<<<<< HEAD
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pytest -v
+=======
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  hallucination-eval:
+    name: Hallucination + injection + multi-turn + bias eval
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run hallucination eval
+        continue-on-error: true
+        env:
+          SHARKGUARD_API_KEY: ${{ secrets.SHARKGUARD_API_KEY }}
+          SHARKGUARD_API_BASE: ${{ secrets.SHARKGUARD_API_BASE }}
+          SHARKGUARD_MODEL: ${{ secrets.SHARKGUARD_MODEL }}
+        run: python scripts/run_eval.py
+
+      - name: Run injection resistance test
+        continue-on-error: true
+        env:
+          SHARKGUARD_API_KEY: ${{ secrets.SHARKGUARD_API_KEY }}
+          SHARKGUARD_API_BASE: ${{ secrets.SHARKGUARD_API_BASE }}
+          SHARKGUARD_MODEL: ${{ secrets.SHARKGUARD_MODEL }}
+          # Optional separate judge model - see README "Separate judge
+          # model" section. Falls back to the model under test if unset.
+          SHARKGUARD_JUDGE_API_KEY: ${{ secrets.SHARKGUARD_JUDGE_API_KEY }}
+          SHARKGUARD_JUDGE_API_BASE: ${{ secrets.SHARKGUARD_JUDGE_API_BASE }}
+          SHARKGUARD_JUDGE_MODEL: ${{ secrets.SHARKGUARD_JUDGE_MODEL }}
+        run: python scripts/injection_test.py
+
+      - name: Run multi-turn conversation test
+        continue-on-error: true
+        env:
+          SHARKGUARD_API_KEY: ${{ secrets.SHARKGUARD_API_KEY }}
+          SHARKGUARD_API_BASE: ${{ secrets.SHARKGUARD_API_BASE }}
+          SHARKGUARD_MODEL: ${{ secrets.SHARKGUARD_MODEL }}
+        run: python scripts/multi_turn_test.py
+
+      # Bias detection always uses LLM-as-judge (no pattern-matching mode
+      # exists for it), so it's skipped automatically if no real model is
+      # configured - see bias_test.py. Consider making this report-only
+      # (drop continue-on-error's effect on the gate) if your team wants
+      # bias findings reviewed by a human rather than auto-blocking merges.
+      - name: Run bias detection test
+        continue-on-error: true
+        env:
+          SHARKGUARD_API_KEY: ${{ secrets.SHARKGUARD_API_KEY }}
+          SHARKGUARD_API_BASE: ${{ secrets.SHARKGUARD_API_BASE }}
+          SHARKGUARD_MODEL: ${{ secrets.SHARKGUARD_MODEL }}
+          SHARKGUARD_JUDGE_API_KEY: ${{ secrets.SHARKGUARD_JUDGE_API_KEY }}
+          SHARKGUARD_JUDGE_API_BASE: ${{ secrets.SHARKGUARD_JUDGE_API_BASE }}
+          SHARKGUARD_JUDGE_MODEL: ${{ secrets.SHARKGUARD_JUDGE_MODEL }}
+        run: python scripts/bias_test.py
+
+      - name: Build summary + decide final pass/fail
+        if: always()
+        id: summary
+        run: |
+          python scripts/build_summary.py > summary.md
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          if grep -q "BUILD BLOCKED" summary.md; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment on PR with results
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: summary.md
+
+      # Optional: notify Slack on failure. Requires a SLACK_WEBHOOK_URL
+      # repo secret (Settings -> Secrets and variables -> Actions) pointing
+      # at your own Slack workspace's incoming webhook. Skips silently if
+      # the secret isn't set, so this is safe to leave in even if you
+      # haven't set up Slack yet.
+      - name: Notify Slack on failure
+        if: always() && steps.summary.outputs.blocked == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not set - skipping Slack notification."
+            exit 0
+          fi
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\": \"🦈 SharkGuard blocked a build in ${{ github.repository }} - see the PR for details.\"}" \
+            "$SLACK_WEBHOOK_URL"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharkguard-results
+          path: |
+            hallucination_results.json
+            injection_results.json
+            multi_turn_results.json
+            bias_results.json
+            summary.md
+
+      - name: Fail the job if any check was blocked
+        if: steps.summary.outputs.blocked == 'true'
+        run: exit 1
+
+  code-security-scan:
+    name: Bandit (code security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run Bandit
+        run: bandit -r scripts/
+
+  dependency-scan:
+    name: Trivy (dependency scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+  secrets-scan:
+    name: Gitleaks (secrets scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+>>>>>>> fb89bd7 (ui finalize with api for testing t)

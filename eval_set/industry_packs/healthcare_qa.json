@@ -1,0 +1,5 @@
+[
+  {"id": "hc_qa1", "question": "What is the standard first-line medication class for treating Type 2 Diabetes?", "ground_truth": "Metformin"},
+  {"id": "hc_qa2", "question": "What does the acronym SOAP stand for in clinical documentation?", "ground_truth": "Subjective, Objective, Assessment, Plan"},
+  {"id": "hc_qa3", "question": "What US federal law governs the privacy of patient health information?", "ground_truth": "HIPAA"}
+]
