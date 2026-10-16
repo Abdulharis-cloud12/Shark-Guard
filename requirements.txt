@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-pytest
-bandit
-requests==2.32.3
-pandas==2.2.3
-streamlit==1.40.1
-=======
 # Minimum versions, not exact pins - exact pins to old releases (e.g.
 # scikit-learn==1.5.2) fail to install on very new Python versions like
 # 3.14, since those old releases were published before 3.14 existed and
@@ -15,4 +8,3 @@ requests>=2.32.3
 pandas>=2.2.3
 streamlit>=1.40.1
 scikit-learn>=1.7.2
->>>>>>> fb89bd7 (ui finalize with api for testing t)

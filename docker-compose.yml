@@ -1,0 +1,89 @@
+# docker compose up --build                  -> dashboard + Ollama at http://localhost:8501
+# docker compose --profile ci run --rm ci    -> CI-style gate in demo mode
+# Ollama model weights persist in the ollama_data volume. First startup downloads
+# the configured model (default: llama3.2:3b), which can take several minutes.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sharkguard-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama-model-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull \"$$OLLAMA_MODEL\""]
+    restart: "no"
+
+  dashboard:
+    build: .
+    image: sharkguard
+    ports:
+      - "8501:8501"
+    depends_on:
+      ollama-model-init:
+        condition: service_completed_successfully
+    environment:
+      # Use the Ollama service on the Compose network.
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      # Opt-in score history lives in memory-backed /tmp: gone when the container stops.
+      SHARKGUARD_HISTORY_PATH: /tmp/sharkguard_history.json
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/sharkguard/.streamlit
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  ci:
+    build: .
+    image: sharkguard
+    profiles: ["ci"]
+    environment:
+      SHARKGUARD_DEMO_MODE: ${SHARKGUARD_DEMO_MODE:-true}
+      SHARKGUARD_API_KEY: ${SHARKGUARD_API_KEY:-}
+      SHARKGUARD_API_BASE: ${SHARKGUARD_API_BASE:-}
+      SHARKGUARD_MODEL: ${SHARKGUARD_MODEL:-}
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+    depends_on:
+      ollama-model-init:
+        condition: service_completed_successfully
+    # Result files are written to the working directory, so use the writable tmpfs.
+    working_dir: /tmp
+    # Mirrors the CI job: each check, then the summary. Exit code is the gate.
+    command: >
+      sh -c "python /app/scripts/run_eval.py; a=$$?;
+             python /app/scripts/injection_test.py; b=$$?;
+             python /app/scripts/multi_turn_test.py; c=$$?;
+             python /app/scripts/build_summary.py;
+             [ $$a -eq 0 ] && [ $$b -eq 0 ] && [ $$c -eq 0 ]"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  ollama_data:

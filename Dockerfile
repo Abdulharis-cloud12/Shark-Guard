@@ -1,30 +1,31 @@
-FROM python:3.12-slim
+# SharkGuard - dashboard + CI-style test scripts in one image.
+# Stateless: no volumes, no baked-in secrets. Keys are passed at run time
+# (or typed into the dashboard, where they live in session memory only).
+FROM python:3.13-slim
 
-# Prevent Python from writing .pyc files
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Send Python output directly to the terminal
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Create a non-root user
-RUN groupadd --system sharkguard \
-    && useradd --system --gid sharkguard sharkguard
-
-# Install dependencies
+# Dependencies first so code edits don't invalidate this layer.
 COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-# Copy application files
-COPY src/ ./src/
-COPY tests/ ./tests/
-
-# Give the non-root user ownership of the application
-RUN chown -R sharkguard:sharkguard /app
-
-# Run the container as the non-root user
+# Run as a non-root user.
+RUN useradd --create-home --uid 10001 sharkguard && chown -R sharkguard /app
 USER sharkguard
 
-CMD ["python", "-c", "print('🦈 SharkGuard container is running')"]
+EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=4).status==200 else 1)"
+
+# Default: the dashboard. Override the command to run the CI scripts, e.g.
+#   docker run --rm sharkguard python scripts/run_eval.py
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501", \
+     "--server.headless=true", "--browser.gatherUsageStats=false"]
