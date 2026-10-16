@@ -28,6 +28,7 @@ from scripts.injection_test import check_resistance, check_resistance_llm_judge
 from scripts.generate_eval import generate_eval_set
 from scripts.hallucination_patterns import recommend_pattern
 from scripts import history
+from scripts.rag_firewall_adapter import firewall_metadata, summarize_agreement, format_agreement
 
 EVAL_SET_PATH = os.path.join(os.path.dirname(__file__), "eval_set", "qa_pairs.json")
 INJECTION_SET_PATH = os.path.join(os.path.dirname(__file__), "eval_set", "injection_prompts.json")
@@ -65,6 +66,11 @@ def load_redteam_injection_set():
 
 
 @st.cache_data
+def load_rag_pack_file(filename):
+    with open(os.path.join(os.path.dirname(__file__), "eval_set", filename)) as f:
+        return json.load(f)
+
+
 def load_industry_file(filename):
     with open(os.path.join(INDUSTRY_DIR, filename)) as f:
         return json.load(f)
@@ -80,17 +86,31 @@ def badge(text, kind):
 
 def run_model_suite(qa_pairs, injections, provider, api_key, api_base, model,
                      threshold, ollama_model="llama3.2", progress_cb=None, use_judge=False,
-                     judge_call_fn=None):
+                     judge_call_fn=None, rag_firewall_path=None, rag_firewall_python=None):
     """Runs both test sets against one model. Returns a results dict.
     judge_call_fn: optional callable(prompt)->str for a separate judge model;
-    if None and use_judge is True, the model under test judges itself."""
+    if None and use_judge is True, the model under test judges itself
+    (not possible for provider "rag_firewall" - a judge prompt must not go
+    through retrieval - so judging is skipped there unless a separate judge is given).
+    For provider "rag_firewall", each row also carries the firewall's own verdict."""
+    is_rag = provider == "rag_firewall"
+
+    def ask(prompt):
+        return call_model(prompt, provider=provider, api_key=api_key, api_base=api_base,
+                          model=model, ollama_model=ollama_model,
+                          rag_firewall_path=rag_firewall_path, rag_firewall_python=rag_firewall_python)
+
+    if use_judge and judge_call_fn is None and not is_rag and provider != "demo":
+        judge_call_fn = ask  # self-judging: the model the user configured, not an env-var default
+    if is_rag and judge_call_fn is None:
+        use_judge = False
+
     total_steps = len(qa_pairs) + len(injections)
     done = 0
 
     hallucination_rows = []
     for item in qa_pairs:
-        answer = call_model(item["question"], provider=provider, api_key=api_key,
-                             api_base=api_base, model=model, ollama_model=ollama_model)
+        answer = ask(item["question"])
         score = score_answer(answer, item["ground_truth"])
         passed = score >= threshold
         row = {
@@ -98,6 +118,8 @@ def run_model_suite(qa_pairs, injections, provider, api_key, api_base, model,
             "passed": passed, "answer": answer,
             "ground_truth": item["ground_truth"],
         }
+        if is_rag:
+            row["firewall"] = firewall_metadata(item["question"])
         if not passed:
             row["suggested_pattern"] = recommend_pattern(item["question"], item["ground_truth"])
         hallucination_rows.append(row)
@@ -107,17 +129,19 @@ def run_model_suite(qa_pairs, injections, provider, api_key, api_base, model,
 
     injection_rows = []
     for item in injections:
-        answer = call_model(item["prompt"], provider=provider, api_key=api_key,
-                             api_base=api_base, model=model, ollama_model=ollama_model)
+        answer = ask(item["prompt"])
         if use_judge and provider != "demo":
             resisted = check_resistance_llm_judge(item["prompt"], answer, item.get("judge_criteria"),
                                                     judge_call_fn=judge_call_fn)
         else:
             resisted = check_resistance(answer, item.get("fail_if_contains", []))
-        injection_rows.append({
+        inj_row = {
             "type": item["type"], "resisted": resisted, "answer": answer,
             "prompt": item["prompt"],
-        })
+        }
+        if is_rag:
+            inj_row["firewall"] = firewall_metadata(item["prompt"])
+        injection_rows.append(inj_row)
         done += 1
         if progress_cb:
             idx = done - len(qa_pairs)
@@ -126,10 +150,16 @@ def run_model_suite(qa_pairs, injections, provider, api_key, api_base, model,
     faithfulness = sum(r["score"] for r in hallucination_rows) / len(hallucination_rows) if hallucination_rows else 0
     resistance = sum(r["resisted"] for r in injection_rows) / len(injection_rows) if injection_rows else 0
 
-    return {
+    out = {
         "faithfulness": faithfulness, "resistance": resistance,
         "hallucination_rows": hallucination_rows, "injection_rows": injection_rows,
+        "judge_skipped": bool(is_rag and use_judge is False),
     }
+    if is_rag:
+        out["firewall_agreement"] = summarize_agreement(
+            [(r["passed"], (r.get("firewall") or {}).get("risk_label")) for r in hallucination_rows] +
+            [(r["resisted"], (r.get("firewall") or {}).get("risk_label")) for r in injection_rows])
+    return out
 
 
 if "custom_eval_set" not in st.session_state:
@@ -145,16 +175,31 @@ with st.sidebar:
                 unsafe_allow_html=True)
     st.divider()
 
-    provider = st.selectbox("Model provider", ["Demo (no setup needed)", "Local (Ollama)", "Hosted (API key)"])
+    provider = st.selectbox("Model provider", ["Demo (no setup needed)", "Local (Ollama)", "Hosted (API key)",
+                                                "RAG Firewall (local)"])
     api_key = api_base = model_name = None
-    ollama_model = "llama3.2"
+    ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+    rag_firewall_path = rag_firewall_python = None
 
     if provider == "Hosted (API key)":
         api_key = st.text_input("API key", type="password")
         api_base = st.text_input("API base URL", placeholder="https://api.groq.com/openai/v1")
         model_name = st.text_input("Model name", placeholder="llama-3.1-8b-instant")
     elif provider == "Local (Ollama)":
-        ollama_model = st.text_input("Ollama model", value="llama3.2")
+        ollama_model = st.text_input("Ollama model", value=os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
+    elif provider == "RAG Firewall (local)":
+        rag_firewall_path = st.text_input(
+            "Path to RAG-Hallucination-Firewall", value=os.environ.get("SHARKGUARD_RAG_FIREWALL_PATH", ""),
+            placeholder="C:\\projects\\RAG-Hallucination-Firewall")
+        rag_firewall_python = st.text_input(
+            "Its Python (optional)", value=os.environ.get("SHARKGUARD_RAG_FIREWALL_PYTHON", ""),
+            placeholder="blank = its .venv if present",
+            help="The interpreter of the firewall's own environment (it needs torch, FAISS, LangChain). "
+                 "SharkGuard runs it as a separate process and never installs those itself.") or None
+        st.caption("Tests the whole RAG system: retrieval + generation + the 3-stage firewall. "
+                   "First question is slow while the NLI model loads. Needs the firewall's DeepSeek key "
+                   "in its own .env and its index built (`python scripts/ingest_docs.py`). "
+                   "Use the **RAG Firewall pack** below.")
     else:
         st.caption("Runs realistic canned responses — no API key or Ollama needed.")
 
@@ -175,7 +220,8 @@ with st.sidebar:
     st.markdown("**Eval set**")
     eval_industries = [name for name, (qa, _) in INDUSTRY_PACKS.items() if qa]
     eval_source = st.radio("Question source",
-                            ["Built-in sample", "Industry pack", "Upload JSON", "Auto-generate from text"],
+                            ["Built-in sample", "Industry pack", "Upload JSON", "Auto-generate from text",
+                             "RAG Firewall pack"],
                             label_visibility="collapsed")
 
     if eval_source == "Industry pack":
@@ -184,6 +230,10 @@ with st.sidebar:
         st.session_state.custom_eval_set = load_industry_file(qa_file)
         st.caption(f"{len(st.session_state.custom_eval_set)} {eval_industry}-specific factual questions "
                    f"— shift-left starter set, catches domain risks at the PR stage.")
+    elif eval_source == "RAG Firewall pack":
+        st.session_state.custom_eval_set = load_rag_pack_file("rag_firewall_qa.json")
+        st.caption(f"{len(st.session_state.custom_eval_set)} in-corpus questions taken from the firewall's "
+                   f"own evaluation set. A correct answer should contain the key terms.")
     elif eval_source == "Upload JSON":
         uploaded = st.file_uploader("Upload a qa_pairs.json-style file", type="json")
         if uploaded is not None:
@@ -215,7 +265,8 @@ with st.sidebar:
 
     st.markdown("**Injection set**")
     injection_source = st.radio("Injection source",
-                                 ["Built-in sample", "Red-team set (23 tests)", "Industry pack", "Upload JSON"],
+                                 ["Built-in sample", "Red-team set (23 tests)", "Industry pack", "Upload JSON",
+                                  "RAG Firewall pack"],
                                  label_visibility="collapsed")
     if injection_source == "Industry pack":
         inj_industry = st.selectbox("Industry", list(INDUSTRY_PACKS.keys()), key="inj_industry")
@@ -224,6 +275,11 @@ with st.sidebar:
         label = "bias checks" if inj_industry == "HR" else "compliance/injection tests"
         st.caption(f"{len(st.session_state.custom_injection_set)} {inj_industry}-specific {label}. "
                    f"Most have no fail_if_contains phrases (judgment-heavy) — turn on LLM-as-judge below.")
+    elif injection_source == "RAG Firewall pack":
+        st.session_state.custom_injection_set = load_rag_pack_file("rag_firewall_scope.json")
+        st.caption(f"{len(st.session_state.custom_injection_set)} out-of-corpus questions. The system "
+                   f"should say its documents don't cover them, not answer from general knowledge. "
+                   f"Pattern mode catches obvious cases; add a separate judge for the rest.")
     elif injection_source == "Upload JSON":
         uploaded_inj = st.file_uploader("Upload an injection_prompts.json-style file", type="json", key="inj_upload")
         if uploaded_inj is not None:
@@ -246,7 +302,7 @@ with st.sidebar:
                                   "matching automatically in Demo mode.")
 
     judge_provider = judge_api_key = judge_api_base = judge_model_name = None
-    judge_ollama_model = "llama3.2"
+    judge_ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
     use_separate_judge = False
     if use_judge:
         use_separate_judge = st.checkbox("Use a separate judge model", value=False,
@@ -293,6 +349,11 @@ if run_clicked:
         provider_key = "ollama"
     elif provider == "Hosted (API key)":
         provider_key = "hosted"
+    elif provider == "RAG Firewall (local)":
+        provider_key = "rag_firewall"
+        if not rag_firewall_path:
+            st.error("Enter the path to your RAG-Hallucination-Firewall clone in the sidebar first.")
+            st.stop()
     else:
         provider_key = "demo"
 
@@ -314,7 +375,8 @@ if run_clicked:
     try:
         results_a = run_model_suite(qa_pairs, injections, provider_key, api_key, api_base,
                                      model_name, threshold, ollama_model, progress_cb=update_progress,
-                                     use_judge=use_judge, judge_call_fn=judge_fn)
+                                     use_judge=use_judge, judge_call_fn=judge_fn,
+                                     rag_firewall_path=rag_firewall_path, rag_firewall_python=rag_firewall_python)
     except Exception as e:
         progress_bar.empty()
         st.error(f"Could not complete the run: {e}")
@@ -343,7 +405,10 @@ if run_clicked:
     else:
         st.error(f"**BUILD BLOCKED** — {n_hallu_fail} hallucination(s), {n_inj_fail} injection failure(s) detected.")
 
-    if use_judge:
+    if results_a.get("judge_skipped") and use_judge:
+        st.caption("Injection scoring: pattern matching. LLM-as-judge needs a separate judge model when "
+                   "testing the RAG Firewall (a judge prompt must not be answered from the document corpus).")
+    elif use_judge:
         judge_note = "separate judge model" if use_separate_judge else "same model under test (self-judged)"
         st.caption(f"Injection scoring: LLM-as-judge, using the {judge_note}.")
 
@@ -351,6 +416,19 @@ if run_clicked:
     m1.metric("Faithfulness", f"{results_a['faithfulness']:.2f}")
     m2.metric("Injection resistance", f"{results_a['resistance']:.0%}")
     m3.metric("Gate status", "Pass" if gate_pass else "Fail")
+
+    agreement = results_a.get("firewall_agreement")
+    if agreement:
+        st.markdown("#### Firewall vs SharkGuard")
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("Both OK", agreement["both_ok"])
+        a2.metric("Both flagged", agreement["both_bad"])
+        a3.metric("Firewall missed", agreement["sharkguard_only_bad"],
+                  help="SharkGuard failed the answer but the firewall's label was LOW.")
+        a4.metric("Firewall-only flags", agreement["firewall_only_flagged"],
+                  help="Firewall flagged it, SharkGuard passed it. Either a false alarm or something "
+                       "keyword/pattern checks can't see - review by hand.")
+        st.caption(format_agreement(agreement) + ". This is a review list, not a verdict on either tool.")
 
     if results_b:
         st.markdown("#### Model comparison")
@@ -367,6 +445,10 @@ if run_clicked:
         c1.write(row["question"])
         c2.write(f"{row['score']:.2f}")
         c3.markdown(badge("Pass" if row["passed"] else "Fail", kind), unsafe_allow_html=True)
+        if row.get("firewall"):
+            fw = row["firewall"]
+            flags = ", ".join(k for k, v in (fw.get("stage_flags") or {}).items() if v) or "none"
+            st.caption(f"Firewall: {fw['risk_label']} (stages flagged: {flags})")
         if not row["passed"]:
             with st.expander("Why did this fail?"):
                 st.write(f"**Expected to contain:** {row['ground_truth']}")
@@ -383,6 +465,8 @@ if run_clicked:
         c1, c2 = st.columns([5, 2])
         c1.write(row["type"].replace("_", " ").title())
         c2.markdown(badge("Resisted" if row["resisted"] else "Compromised", kind), unsafe_allow_html=True)
+        if row.get("firewall"):
+            st.caption(f"Firewall: {row['firewall']['risk_label']}")
         if not row["resisted"]:
             with st.expander("See the compromised response"):
                 st.write(f"**Prompt:** {row['prompt']}")
@@ -397,6 +481,9 @@ if run_clicked:
         "hallucination_results": results_a["hallucination_rows"],
         "injection_results": results_a["injection_rows"],
     }
+    if agreement:
+        report["rag_firewall"] = True
+        report["firewall_agreement"] = agreement
     st.download_button("Download report (JSON)", data=json.dumps(report, indent=2),
                         file_name="sharkguard_report.json", mime="application/json",
                         use_container_width=True)

@@ -1,81 +1,3 @@
-<<<<<<< HEAD
-# 🦈 SharkGuard
-
-### AI Reliability & Security Testing — Stateless, CI/CD-First
-
-> **SharkGuard hunts hallucinations and prompt injections before they ship.**
-
-SharkGuard is an academic semester project developed by a team of four students. It is a stateless testing framework for evaluating the **reliability and security of LLM-powered applications** before deployment.
-
-## 🎯 Core Focus
-
-- AI hallucination and reliability evaluation
-- Prompt injection and adversarial testing
-- Automated security scanning
-- CI/CD-based quality and security gates
-- Multi-model comparison
-- Stateless API key handling
-
-## 🏗️ Architecture
-
-```text
-                  Developer / AI Application
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ GitHub      │
-                    │ Actions     │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ SharkGuard  │
-                    │ Core Engine │
-                    └──────┬──────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-   │ Hallucination│  │   Prompt    │  │  Security   │
-   │ Evaluation  │  │  Injection  │  │   Scans     │
-   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-          │                │                │
-          ▼                ▼                ▼
-       RAGAS /          Adversarial     Bandit / Trivy
-       DeepEval           Tests           / Gitleaks
-          │                │                │
-          └────────────────┼────────────────┘
-                           ▼
-                    ┌─────────────┐
-                    │   Results   │
-                    │  & Scoring  │
-                    └──────┬──────┘
-                           │
-                      ┌────┴────┐
-                      ▼         ▼
-                    PASS       FAIL
-                      │         │
-                      ▼         ▼
-                  Merge /    Block PR
-                  Deploy
-```
-
-## 📊 Dashboard
-
-`app.py` is a Streamlit dashboard with two modes, picked in the sidebar:
-
-- **Run live** — configure a model (demo / local Ollama / hosted API) and
-  SharkGuard calls it directly from the session. Stateless: any API key
-  entered lives only in memory for that run.
-- **Load from GitHub Actions** — pulls the exact `hallucination_results.json`
-  and `injection_results.json` artifacts the `reliability-eval` CI job
-  already produced, instead of spending fresh model calls. Needs a GitHub
-  token with `actions:read` (GitHub requires auth to download workflow
-  artifacts even on public repos); the token is used only for that fetch
-  and is never stored.
-
-Run it with:
-=======
 # SharkGuard
 
 AI reliability and prompt-injection testing, built as a stateless CI/CD gate.
@@ -107,6 +29,8 @@ the application layer, not the model itself.
   and timestamps, never keys or prompts
 - **CI/CD gate** — GitHub Actions pipeline with a PR comment showing results,
   optional Slack alert on failure, plus Bandit/Trivy/Gitleaks security scans
+- **RAG Firewall integration** — test a whole RAG system (retrieval + generation +
+  3-stage hallucination firewall) and compare its risk labels with SharkGuard's verdicts
 - **Demo mode** — zero setup, realistic mixed pass/fail results, so you can
   see it work before configuring anything
 
@@ -131,6 +55,8 @@ sharkguard/
 │   ├── injection_redteam_set.json  red-team injection set (23 items, see below)
 │   ├── multi_turn_set.json       multi-turn conversation test set
 │   ├── bias_prompts.json         bias detection test set (6 items)
+│   ├── rag_firewall_qa.json      16 in-corpus questions for the RAG Firewall (see below)
+│   ├── rag_firewall_scope.json   12 out-of-corpus questions the RAG Firewall should refuse
 │   └── image_gen_prompts.json    image-gen test set format (see below)
 ├── scripts/
 │   ├── model_client.py           single/multi-turn model calls, demo mode
@@ -139,6 +65,8 @@ sharkguard/
 │   ├── injection_test.py         injection resistance logic (2 modes)
 │   ├── multi_turn_test.py        multi-turn conversation logic
 │   ├── bias_test.py              bias detection logic (LLM-as-judge only)
+│   ├── rag_firewall_adapter.py   runs the RAG Firewall as a subprocess (stdlib only)
+│   ├── rag_firewall_worker.py    runs INSIDE the firewall's environment, not SharkGuard's
 │   ├── hallucination_patterns.py suggested-fix pattern library
 │   ├── generate_eval.py          auto-generate eval questions from text
 │   ├── history.py                local, opt-in score history
@@ -304,25 +232,77 @@ set SHARKGUARD_INJECTION_JUDGE=llm
 
 ## Running the dashboard
 
->>>>>>> fb89bd7 (ui finalize with api for testing t)
 ```
 streamlit run app.py
 ```
 
-<<<<<<< HEAD
-## ⚙️ CI Pipeline
-
-`.github/workflows/ci.yml` runs four jobs on every push or PR to `main`:
-
-| Job | What it does |
-|---|---|
-| `test` | Runs `pytest` |
-| `reliability-eval` | Runs the hallucination eval and injection resistance test against a model (demo mode by default; add `SHARKGUARD_API_KEY`/`SHARKGUARD_API_BASE`/`SHARKGUARD_MODEL` as repo secrets to test a real model), uploads the JSON results as the `sharkguard-results` artifact |
-| `security` | Bandit, Gitleaks, Trivy (filesystem + built Docker image) |
-| `gate` | Runs only if the three jobs above succeed |
-=======
 Pick **Demo (no setup needed)** in the sidebar for an instant, honest
 mixed-result run with no configuration at all.
+
+## Running with Docker
+
+One image runs both modes. It holds no secrets and no volumes, runs as a
+non-root user, and the compose file mounts the root filesystem read-only.
+
+```
+docker compose up --build                  # dashboard at http://localhost:8501
+docker compose --profile ci run --rm ci    # the CI-style gate, demo mode
+```
+
+The `ci` service runs the hallucination, injection and multi-turn checks, then
+prints the summary, and its exit code is the gate (non-zero = build blocked),
+same as the GitHub Actions job. To test a real model, export
+`SHARKGUARD_API_KEY`, `SHARKGUARD_API_BASE`, `SHARKGUARD_MODEL` and
+`SHARKGUARD_DEMO_MODE=false` in your shell (or a git-ignored `.env`) first;
+compose passes them through and nothing is baked into the image.
+
+Or without compose:
+```
+docker build -t sharkguard .
+docker run --rm -p 8501:8501 sharkguard
+docker run --rm -e SHARKGUARD_DEMO_MODE=true sharkguard python scripts/run_eval.py
+```
+
+### Publish to Docker Hub
+
+Replace `YOUR_DOCKERHUB_USERNAME` with your Docker Hub username. Create the repository
+`sharkguard` on Docker Hub first, then run these commands from the project root:
+
+```powershell
+# Sign in interactively; Docker prompts for credentials/token.
+docker login
+
+# Build and tag the image.
+docker build -t YOUR_DOCKERHUB_USERNAME/sharkguard:1.0.0 .
+docker tag YOUR_DOCKERHUB_USERNAME/sharkguard:1.0.0 YOUR_DOCKERHUB_USERNAME/sharkguard:latest
+
+# Push both tags.
+docker push YOUR_DOCKERHUB_USERNAME/sharkguard:1.0.0
+docker push YOUR_DOCKERHUB_USERNAME/sharkguard:latest
+
+# Pull and run the published image.
+docker pull YOUR_DOCKERHUB_USERNAME/sharkguard:latest
+docker run --rm -p 8501:8501 YOUR_DOCKERHUB_USERNAME/sharkguard:latest
+```
+
+Open `http://localhost:8501`. Do not put API keys in the image or commit `.env`; pass
+secrets at runtime with `--env-file .env` or environment variables. Use a real model
+configuration for meaningful quality/security evaluation. Demo mode deliberately returns
+some failures so it demonstrates that the gate catches unsafe or incorrect behavior.
+
+Notes:
+- **Ollama** runs on your machine, not in the container. The image reaches it at
+  `host.docker.internal:11434` (Docker Desktop on Windows/Mac; compose also maps
+  the name on Linux). Override with `OLLAMA_HOST`. On Linux Ollama must listen
+  on more than localhost (`OLLAMA_HOST=0.0.0.0`) for the container to reach it.
+- **Opt-in score history** is written to the container's `/tmp`, so it disappears
+  when the container stops. That is deliberate and keeps the stateless promise.
+- **RAG Firewall mode is not supported in this image.** It needs the firewall's
+  own environment (torch, FAISS, LangChain) and index; run that mode directly on
+  your machine as described above.
+- Docker image builds must be run on a machine with Docker Engine/Desktop installed.
+  This repository's CI checks Python syntax and summary logic; run the Docker commands above
+  locally before publishing an image.
 
 ## Using in your own repo
 
@@ -338,6 +318,64 @@ mixed-result run with no configuration at all.
    auto-generate feature to draft a starting set from your docs.
 5. Push — the pipeline runs automatically on your next PR, and posts a
    results comment directly on it.
+
+## Testing a RAG system: the RAG Firewall integration
+
+[RAG-Hallucination-Firewall](https://github.com/swathi-2406/RAG-Hallucination-Firewall)
+is a RAG pipeline (FAISS retrieval + DeepSeek generation) with a 3-stage
+hallucination detector (semantic entropy, JSD, NLI). SharkGuard can test that
+whole system instead of a bare model: each question goes through the
+firewall's real `retrieve -> run_firewall` pipeline, SharkGuard scores the
+**answer** the way it scores any model's answer, and the firewall's **own
+risk label** is recorded beside it.
+
+Why both: the two checkers fail differently. SharkGuard checks the answer
+against ground truth or a refusal expectation; the firewall checks the answer
+against the retrieved context. The agreement summary lists where they
+disagree, which is a **review list, not a verdict on either tool**:
+
+| Bucket | Meaning |
+|---|---|
+| both OK / both flagged | the two agree |
+| firewall missed | SharkGuard failed the answer, firewall said LOW |
+| firewall-only flags | firewall flagged it, SharkGuard passed it: a false alarm, or something keyword/pattern checks can't see |
+
+**Setup (once):** clone the firewall repo, give it its own environment
+(`pip install -r requirements.txt` there), put its DeepSeek key in its own
+`.env`, and build its index with `python scripts/ingest_docs.py`. SharkGuard
+never installs torch, FAISS or LangChain; it launches the firewall's Python as
+a separate long-lived process, so the NLI model loads once per run.
+
+```bash
+export SHARKGUARD_RAG_FIREWALL_PATH=/path/to/RAG-Hallucination-Firewall
+# optional: the firewall's interpreter (default: its .venv or venv if present)
+export SHARKGUARD_RAG_FIREWALL_PYTHON=/path/to/RAG-Hallucination-Firewall/.venv/bin/python
+
+SHARKGUARD_EVAL_SET=eval_set/rag_firewall_qa.json python scripts/run_eval.py
+SHARKGUARD_INJECTION_SET=eval_set/rag_firewall_scope.json python scripts/injection_test.py
+```
+
+Or pick **RAG Firewall (local)** as the provider in the dashboard, enter the
+path, and choose **RAG Firewall pack** for both question sets.
+
+Notes and limits:
+- **Judge:** with the firewall as the system under test, LLM-as-judge needs a
+  *separate* judge model (`SHARKGUARD_JUDGE_*`). Pushing a judge prompt
+  through retrieval would just get it answered from the corpus. Without one,
+  the scope test falls back to pattern mode and says so; 5 of the 12 scope
+  questions have no safe keyword and are only meaningful with a judge.
+- `multi_turn_test.py` and `bias_test.py` skip themselves (exit 0) in this
+  mode: the firewall is single-turn and corpus-bound.
+- Environment variables: `SHARKGUARD_RAG_FIREWALL_STARTUP_TIMEOUT` (default 300 s,
+  index + model load) and `SHARKGUARD_RAG_FIREWALL_TIMEOUT` (default 180 s per question).
+  A crashed or timed-out worker is restarted on the next question.
+- Not wired into `ci.yml` on purpose: a GitHub-hosted runner would need torch,
+  the NLI model download, a built index and a DeepSeek secret on every run. Run
+  it locally, on a self-hosted runner, or as a workflow in the firewall's own repo.
+- The in-corpus questions are the firewall's own evaluation questions, so
+  expect them to be the *easy* case for it; the scope questions are the better stress test.
+- Tested against a stand-in with the same interface (errors, crashes, timeouts,
+  noisy stdout), **not yet against the real firewall**. The first real run is the real test.
 
 ## Known gaps (be upfront about these)
 
@@ -368,4 +406,33 @@ mixed-result run with no configuration at all.
 ## Team
 
 Built by Iadi, with Aditya, Abdul, Rahul, and Karthik.
->>>>>>> fb89bd7 (ui finalize with api for testing t)
+
+
+## Docker Compose with Ollama (local LLM)
+
+The Compose stack runs the SharkGuard dashboard and Ollama in separate containers. The first `docker compose up --build` downloads the model configured by `OLLAMA_MODEL` (default `llama3.2:3b`) into a persistent Docker volume. This download can take several minutes and requires enough disk space and RAM.
+
+```powershell
+# Optional: select a different model before startup
+$env:OLLAMA_MODEL = "llama3.2:3b"
+
+docker compose up --build -d
+docker compose ps
+docker compose logs -f dashboard
+```
+
+Open <http://localhost:8501>, choose **Local (Ollama)** in the sidebar, and use the same model name configured in `OLLAMA_MODEL`. Ollama's API is also exposed on `http://localhost:11434` for local development. Model weights are persisted in the `ollama_data` volume and are not baked into the SharkGuard Docker image, so publishing the SharkGuard image to Docker Hub does not upload the model weights.
+
+To stop the stack without deleting the downloaded model:
+
+```powershell
+docker compose down
+```
+
+To remove the downloaded model volume as well (destructive):
+
+```powershell
+docker compose down -v
+```
+
+The `ci` Compose profile also uses the Ollama service and model initialization. The default demo evaluation mode is separate from real-model testing.
