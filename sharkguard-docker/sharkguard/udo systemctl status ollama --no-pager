@@ -1,0 +1,15 @@
+[0;1;34m# ]8;;file://abdulharis-VirtualBox/etc/systemd/system/ollama.service/etc/systemd/system/ollama.service]8;;[0m
+[0;1;36m[Unit][0m
+Description=Ollama Service
+After=network-online.target
+[0;1;38;5;245m[0m
+[0;1;36m[Service][0m
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="PATH=/home/abdulharis/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/abdulharis/.local/bin:/home/abdulharis/.local/bin"
+[0;1;38;5;245m[0m
+[0;1;36m[Install][0m
+WantedBy=default.target

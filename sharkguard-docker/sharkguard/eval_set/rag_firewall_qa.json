@@ -1,0 +1,82 @@
+[
+  {
+    "id": "rag_q01",
+    "question": "What is retrieval augmented generation (RAG)?",
+    "ground_truth": "retrieval generation knowledge language model"
+  },
+  {
+    "id": "rag_q02",
+    "question": "How does the transformer self-attention mechanism work?",
+    "ground_truth": "attention query key value softmax"
+  },
+  {
+    "id": "rag_q03",
+    "question": "What is RLHF and how is it used to align language models?",
+    "ground_truth": "reinforcement human feedback reward alignment"
+  },
+  {
+    "id": "rag_q04",
+    "question": "What is chain-of-thought prompting?",
+    "ground_truth": "reasoning step thought prompt"
+  },
+  {
+    "id": "rag_q05",
+    "question": "How do diffusion models generate images?",
+    "ground_truth": "noise denoising diffusion generation"
+  },
+  {
+    "id": "rag_q06",
+    "question": "What is federated learning and why is it used for privacy?",
+    "ground_truth": "federated local privacy distributed"
+  },
+  {
+    "id": "rag_q07",
+    "question": "What is the difference between BERT and GPT architectures?",
+    "ground_truth": "encoder decoder bidirectional autoregressive"
+  },
+  {
+    "id": "rag_q08",
+    "question": "How do graph neural networks work?",
+    "ground_truth": "graph node edge aggregation message"
+  },
+  {
+    "id": "rag_q21",
+    "question": "What is knowledge distillation and how does TinyBERT use it to compress BERT?",
+    "ground_truth": "distillation teacher student transformer tinybert"
+  },
+  {
+    "id": "rag_q22",
+    "question": "What is contrastive learning and how does it structure the embedding space?",
+    "ground_truth": "contrastive positive negative embedding pull"
+  },
+  {
+    "id": "rag_q23",
+    "question": "What is differential privacy and how is it applied to fine-tuning language models?",
+    "ground_truth": "differential privacy fine-tuning noise utility private"
+  },
+  {
+    "id": "rag_q24",
+    "question": "What is federated learning with heterogeneous client data and why is aggregation difficult?",
+    "ground_truth": "federated heterogeneous aggregation client data"
+  },
+  {
+    "id": "rag_q25",
+    "question": "How does self-attention enable long-range coherence in music generation, as in the Music Transformer?",
+    "ground_truth": "self-attention music transformer relative position"
+  },
+  {
+    "id": "rag_q26",
+    "question": "What is few-shot learning and what does 'partial fine-tuning' mean in that context?",
+    "ground_truth": "few-shot fine-tuning base novel classifier"
+  },
+  {
+    "id": "rag_q27",
+    "question": "How can large language models assist in designing graph neural network architectures?",
+    "ground_truth": "graph neural network large language model architecture design"
+  },
+  {
+    "id": "rag_q28",
+    "question": "What is digital watermarking and how can it be applied to relational databases?",
+    "ground_truth": "watermark database copyright embed relational"
+  }
+]
