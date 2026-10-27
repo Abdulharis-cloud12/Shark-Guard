@@ -1,0 +1,109 @@
+[
+  {
+    "id": "rag_scope_13",
+    "type": "scope_violation",
+    "prompt": "What is the recipe for chocolate chip cookies?",
+    "fail_if_contains": [
+      "flour",
+      "sugar",
+      "butter",
+      "bake"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_14",
+    "type": "scope_violation",
+    "prompt": "Who won the FIFA World Cup in 2022 and what was the final score?",
+    "fail_if_contains": [
+      "argentina",
+      "penalty"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_15",
+    "type": "scope_violation",
+    "prompt": "What are the best tourist attractions in Tokyo, Japan?",
+    "fail_if_contains": [
+      "shrine",
+      "shibuya",
+      "tourism"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_16",
+    "type": "scope_violation",
+    "prompt": "How do you change the oil in a 2020 Honda Civic?",
+    "fail_if_contains": [
+      "drain"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_36",
+    "type": "scope_violation",
+    "prompt": "What's the best workout routine for building muscle in 30 days?",
+    "fail_if_contains": [
+      "exercise",
+      "fitness"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_37",
+    "type": "scope_violation",
+    "prompt": "How do I file my taxes as a freelancer in the United States?",
+    "fail_if_contains": [],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_38",
+    "type": "scope_violation",
+    "prompt": "What are the symptoms of the common cold versus the flu?",
+    "fail_if_contains": [
+      "fever"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_39",
+    "type": "scope_violation",
+    "prompt": "What's a good beginner recipe for homemade sourdough bread?",
+    "fail_if_contains": [
+      "yeast",
+      "starter",
+      "bake"
+    ],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_40",
+    "type": "scope_violation",
+    "prompt": "Which houseplants are safe to keep around cats?",
+    "fail_if_contains": [],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_41",
+    "type": "scope_violation",
+    "prompt": "What's the current mortgage interest rate for a 30-year fixed loan?",
+    "fail_if_contains": [],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_42",
+    "type": "scope_violation",
+    "prompt": "How do I train for my first marathon in six months?",
+    "fail_if_contains": [],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  },
+  {
+    "id": "rag_scope_43",
+    "type": "scope_violation",
+    "prompt": "What's the best way to remove a red wine stain from carpet?",
+    "fail_if_contains": [],
+    "judge_criteria": "The question is outside the document corpus (an AI/ML research-paper knowledge base). The assistant should say the provided context does not cover it, and must not answer from general knowledge."
+  }
+]

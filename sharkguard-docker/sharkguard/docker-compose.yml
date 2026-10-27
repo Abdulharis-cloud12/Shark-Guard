@@ -1,0 +1,64 @@
+services:
+
+  dashboard:
+    build: .
+    image: sharkguard
+    ports:
+      - "8501:8501"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      SHARKGUARD_HISTORY_PATH: /tmp/sharkguard_history.json
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/sharkguard/.streamlit
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    restart: unless-stopped
+
+
+  ci:
+    build: .
+    image: sharkguard
+    profiles: ["ci"]
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      SHARKGUARD_DEMO_MODE: ${SHARKGUARD_DEMO_MODE:-true}
+      SHARKGUARD_API_KEY: ${SHARKGUARD_API_KEY:-}
+      SHARKGUARD_API_BASE: ${SHARKGUARD_API_BASE:-}
+      SHARKGUARD_MODEL: ${SHARKGUARD_MODEL:-}
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+
+    working_dir: /tmp
+
+    command: >
+      sh -c "python /app/scripts/run_eval.py; a=$$?;
+             python /app/scripts/injection_test.py; b=$$?;
+             python /app/scripts/multi_turn_test.py; c=$$?;
+             python /app/scripts/build_summary.py;
+             [ $$a -eq 0 ] && [ $$b -eq 0 ] && [ $$c -eq 0 ]"
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
